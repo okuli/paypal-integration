@@ -1,0 +1,22 @@
+paypal:
+  client-id: AftdefUpAl-QODhNnETlhmekGc122NG1-fp9EoNuvAd4S9ClcuBA12CtykYV74kZR1DscwDZgT19pVio
+  client-secret: EDfCd-nNB_SMyedHBhjw9KBhiWkWpMudOwgStUIrEEaVmwmvQ0J8ukmvxNGLx1OQ_kbCdpKg1GlBzd8K
+  mode: sandbox # We use sandbox for testing and 'live' for Production
+  success-url: https://paypal-integration-8f06aefa18a5.herokuapp.com/payment/success
+  cancel-url: https://paypal-integration-8f06aefa18a5.herokuapp.com/payment/cancel
+#  success-url: http://localhost:8080/payment/success
+#  cancel-url: http://localhost:8080/payment/cancel
+
+
+
+#logging:
+#  level:
+#    root: DEBUG
+spring:
+  web:
+    resources:
+      static-locations:
+        - classpath:/static/
+        - classpath:/templates/
+
+

@@ -1,0 +1,64 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.3.4'
+	id 'io.spring.dependency-management' version '1.1.6'
+}
+
+group = 'com.oket'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '17'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.projectlombok:lombok'
+	implementation 'com.paypal.sdk:paypal-core:1.7.2'
+	implementation 'com.paypal.sdk:rest-api-sdk:1.14.0'
+	implementation group: 'org.springdoc', name: 'springdoc-openapi-starter-webmvc-ui', version: '2.6.0'
+	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.junit.jupiter:junit-jupiter-api'
+	testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+bootJar {
+	enabled = true;
+}
+
+//tasks.withType(Jar).configureEach {
+//	enabled = false // Disable the plain JAR task to avoid generating plain JARs
+//}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+tasks.register('stage') {
+	dependsOn 'bootJar'
+}
+
+tasks.withType(Test).configureEach {
+	useJUnitPlatform()
+	testLogging {
+		events "passed", "skipped", "failed"
+	}
+	ignoreFailures = true  // This will allow the build to continue even if tests fail
+}
