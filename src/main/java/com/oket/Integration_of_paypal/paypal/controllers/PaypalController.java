@@ -38,7 +38,8 @@ public class PaypalController {
         return "index";
     }
 
-    @Operation(summary = "Create a new PayPal payment", description = "Creates a new PayPal payment and returns either a JSON response or redirects to a payment approval URL.")
+    @Operation(summary = "Create a new PayPal payment",
+            description = "Creates a new PayPal payment and returns either a JSON response or redirects to a payment approval URL.")
     @PostMapping(value = "/payment/create", produces = MediaType.APPLICATION_JSON_VALUE)
     public Object createPayment(@RequestHeader(value = "Accept", required = false) String accept) {
         try {
@@ -53,20 +54,19 @@ public class PaypalController {
             }
 
             return respondBasedOnAcceptHeader(accept, approvalUrl, payment.getId());
-
         } catch (PayPalRESTException e) {
             log.error("Error occurred while creating payment", e);
             return handleError(accept, "Payment creation failed", "/payment/error", e);
         }
     }
 
-    @Operation(summary = "Handle successful payment", description = "Handles a successful payment and returns a success view or JSON response.")
+    @Operation(summary = "Handle successful payment",
+            description = "Handles a successful payment and returns a success view or JSON response.")
     @GetMapping("/payment/success")
     public Object paymentSuccess(
             @RequestHeader(value = "Accept", required = false) String accept,
             @RequestParam("paymentId") String paymentId,
-            @RequestParam("PayerID") String payerId
-    ) {
+            @RequestParam("PayerID") String payerId) {
         try {
             Payment payment = paypalService.executePayment(paymentId, payerId);
             if ("approved".equals(payment.getState())) {
@@ -79,14 +79,16 @@ public class PaypalController {
         return handleErrorResponse(accept, "Payment execution failed", "paymentSuccess");
     }
 
-    @Operation(summary = "Handle payment cancellation", description = "Handles a cancelled payment and returns either a cancellation view or a JSON response.")
+    @Operation(summary = "Handle payment cancellation",
+            description = "Handles a cancelled payment and returns either a cancellation view or a JSON response.")
     @GetMapping("/payment/cancel")
     public Object paymentCancel(@RequestHeader(value = "Accept", required = false) String accept) {
         Map<String, Object> response = Map.of("status", "cancelled", "message", "Payment cancelled by user");
         return createResponse(accept, response, "paymentCancel");
     }
 
-    @Operation(summary = "Handle payment error", description = "Handles errors during the payment process and returns an error view or JSON response.")
+    @Operation(summary = "Handle payment error",
+            description = "Handles errors during the payment process and returns an error view or JSON response.")
     @GetMapping("/payment/error")
     public Object paymentError(@RequestHeader(value = "Accept", required = false) String accept) {
         Map<String, Object> response = Map.of("status", "error", "message", "An error occurred during the payment process");
@@ -104,10 +106,9 @@ public class PaypalController {
     }
 
     private Object createResponse(String accept, Map<String, Object> message, Object view) {
-        if (accept != null && accept.contains("application/json")) {
-            return ResponseEntity.ok(message);
-        }
-        return view;
+        return accept != null && accept.contains("application/json")
+                ? ResponseEntity.ok(message)
+                : view;
     }
 
     private Object createResponse(String accept, String status, Map<String, Object> message, Object view) {
@@ -129,19 +130,18 @@ public class PaypalController {
         Map<String, Object> response = new HashMap<>();
         response.put("status", "error");
         response.put("message", errorMessage);
-        if (e instanceof PayPalRESTException) {
-            PayPalRESTException pex = (PayPalRESTException) e;
+        if (e instanceof PayPalRESTException pex) {
             response.put("error", pex.getDetails() != null ? pex.getDetails().getMessage() : e.getMessage());
         }
 
-        if (accept != null && accept.contains("application/json")) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
-        return new RedirectView(errorPage);
+        return accept != null && accept.contains("application/json")
+                ? ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response)
+                : new RedirectView(errorPage);
     }
 
     private Object handleErrorResponse(String accept, String errorMessage, String errorPage) {
         return handleError(accept, errorMessage, errorPage, null);
     }
 }
+
 
