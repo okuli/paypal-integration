@@ -40,7 +40,7 @@ public class PaypalController {
 
     @Operation(summary = "Create a new PayPal payment",
             description = "Creates a new PayPal payment and returns either a JSON response or redirects to a payment approval URL.")
-    @PostMapping(value = "/payment/create", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/payment/create", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.TEXT_HTML_VALUE})
     public Object createPayment(@RequestHeader(value = "Accept", required = false) String accept) {
         try {
             Payment payment = paypalService.createPayment(
@@ -53,6 +53,7 @@ public class PaypalController {
                 throw new PayPalRESTException("Approval URL not found");
             }
 
+            // Return JSON response or Redirect to approval URL
             return respondBasedOnAcceptHeader(accept, approvalUrl, payment.getId());
         } catch (PayPalRESTException e) {
             log.error("Error occurred while creating payment", e);
@@ -143,5 +144,3 @@ public class PaypalController {
         return handleError(accept, errorMessage, errorPage, null);
     }
 }
-
-
