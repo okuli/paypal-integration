@@ -44,6 +44,11 @@ public class PaypalController {
             description = "Creates a new PayPal payment and returns either a JSON response or redirects to a payment approval URL.")
     @PostMapping(value = "/payment/create", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.TEXT_HTML_VALUE})
     public Object createPayment(@RequestHeader(value = "Accept", required = false) String accept) {
+        // Basic validation example
+        if (cancelUrl == null || successUrl == null) {
+            return handleError(accept, "Missing configuration URLs", "/payment/error", null);
+        }
+
         try {
             String approvalUrl = paypalService.createPaymentWithApprovalUrl(10.0, "USD", "paypal", "sale",
                     "Payment description", cancelUrl, successUrl);
@@ -61,6 +66,12 @@ public class PaypalController {
             @RequestHeader(value = "Accept", required = false) String accept,
             @RequestParam("paymentId") String paymentId,
             @RequestParam("PayerID") String payerId) {
+
+        // Validation of paymentId and payerId
+        if (paymentId == null || paymentId.isEmpty() || payerId == null || payerId.isEmpty()) {
+            return handleErrorResponse(accept, "Invalid paymentId or payerId", "paymentSuccess");
+        }
+
         try {
             boolean isPaymentApproved = paypalService.executePaymentAndCheckState(paymentId, payerId);
             if (isPaymentApproved) {
@@ -119,4 +130,3 @@ public class PaypalController {
         return handleError(accept, errorMessage, errorPage, null);
     }
 }
-
