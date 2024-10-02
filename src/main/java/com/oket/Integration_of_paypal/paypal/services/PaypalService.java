@@ -13,35 +13,39 @@ public class PaypalService {
 
     private final APIContext apiContext;
 
-    public Payment createPayment(Double total,
-                                 String currency,
-                                 String method,
-                                 String intent,
-                                 String description,
-                                 String cancelUrl,
-                                 String successUrl) throws PayPalRESTException {
+    public String createPaymentWithApprovalUrl(Double total, String currency, String method, String intent,
+                                               String description, String cancelUrl, String successUrl)
+            throws PayPalRESTException {
 
-        // Set up the payment amount
+        Payment payment = createPayment(total, currency, method, intent, description, cancelUrl, successUrl);
+
+        return payment.getLinks().stream()
+                .filter(link -> "approval_url".equals(link.getRel()))
+                .map(Links::getHref)
+                .findFirst()
+                .orElseThrow(() -> new PayPalRESTException("Approval URL not found"));
+    }
+
+    public boolean executePaymentAndCheckState(String paymentId, String payerId) throws PayPalRESTException {
+        Payment payment = executePayment(paymentId, payerId);
+        return "approved".equals(payment.getState());
+    }
+
+    private Payment createPayment(Double total, String currency, String method, String intent,
+                                  String description, String cancelUrl, String successUrl) throws PayPalRESTException {
+
         Amount amount = createAmount(total, currency);
-
-        // Create a transaction
         Transaction transaction = createTransaction(description, amount);
-
-        // Set up the payer information
         Payer payer = createPayer(method);
-
-        // Create the payment object
         Payment payment = new Payment();
         payment.setIntent(intent);
         payment.setPayer(payer);
         payment.setTransactions(Collections.singletonList(transaction));
         payment.setRedirectUrls(createRedirectUrls(cancelUrl, successUrl));
-
-        // Create and return the payment
         return payment.create(apiContext);
     }
 
-    public Payment executePayment(String paymentId, String payerId) throws PayPalRESTException {
+    private Payment executePayment(String paymentId, String payerId) throws PayPalRESTException {
         Payment payment = new Payment();
         payment.setId(paymentId);
 
@@ -80,4 +84,3 @@ public class PaypalService {
         return redirectUrls;
     }
 }
-
