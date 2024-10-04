@@ -11,13 +11,13 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 
 @SpringBootTest
 public class PaypalControllerApiTest {
@@ -37,15 +37,16 @@ public class PaypalControllerApiTest {
 
     @Test
     public void testCreatePayment() throws Exception {
-        // Mock the service to return a valid approval URL
+        String expectedApprovalUrl = "http://approval.url";
+
         when(paypalService.createPaymentWithApprovalUrl(anyDouble(), anyString(), anyString(), anyString(),
-                anyString(), anyString(), anyString())).thenReturn("http://approval.url");
+                anyString(), anyString(), anyString())).thenReturn(expectedApprovalUrl);
 
         // Perform the request and check for success
         mockMvc.perform(post("/payment/create")
                         .header("Accept", MediaType.APPLICATION_JSON_VALUE)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.approvalUrl").value("http://approval.url"));  // Fixed the cast issue
+                .andExpect(jsonPath("$.approvalUrl").value(expectedApprovalUrl));
     }
 }
