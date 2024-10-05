@@ -1,9 +1,9 @@
 package com.oket.Integration_of_paypal.paypal.services;
+import com.paypal.api.payments.*;
 import com.paypal.base.rest.APIContext;
 import com.paypal.base.rest.PayPalRESTException;
-import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
-import com.paypal.api.payments.*;
+import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.Locale;
@@ -18,14 +18,8 @@ public class PaypalServiceImpl implements PaypalService {
     public String createPaymentWithApprovalUrl(Double total, String currency, String method, String intent,
                                                String description, String cancelUrl, String successUrl)
             throws PayPalRESTException {
-
         Payment payment = createPayment(total, currency, method, intent, description, cancelUrl, successUrl);
-
-        return payment.getLinks().stream()
-                .filter(link -> "approval_url".equals(link.getRel()))
-                .map(Links::getHref)
-                .findFirst()
-                .orElseThrow(() -> new PayPalRESTException("Approval URL not found"));
+        return extractApprovalUrl(payment);
     }
 
     @Override
@@ -34,56 +28,50 @@ public class PaypalServiceImpl implements PaypalService {
         return "approved".equals(payment.getState());
     }
 
-    private Payment createPayment(Double total, String currency, String method, String intent,
-                                  String description, String cancelUrl, String successUrl) throws PayPalRESTException {
-
-        Amount amount = createAmount(total, currency);
-        Transaction transaction = createTransaction(description, amount);
-        Payer payer = createPayer(method);
-        Payment payment = new Payment();
-        payment.setIntent(intent);
-        payment.setPayer(payer);
-        payment.setTransactions(Collections.singletonList(transaction));
-        payment.setRedirectUrls(createRedirectUrls(cancelUrl, successUrl));
-        return payment.create(apiContext);
+    public Payment createPayment(Double total, String currency, String method, String intent,
+                                 String description, String cancelUrl, String successUrl)
+            throws PayPalRESTException {
+        Transaction transaction = buildTransaction(description, buildAmount(total, currency));
+        return new Payment()
+                .setIntent(intent)
+                .setPayer(buildPayer(method))
+                .setTransactions(Collections.singletonList(transaction))
+                .setRedirectUrls(buildRedirectUrls(cancelUrl, successUrl))
+                .create(apiContext);
     }
 
-    private Payment executePayment(String paymentId, String payerId) throws PayPalRESTException {
-        Payment payment = new Payment();
-        payment.setId(paymentId);
-
-        PaymentExecution paymentExecution = new PaymentExecution();
-        paymentExecution.setPayerId(payerId);
-
-        return payment.execute(apiContext, paymentExecution);
+    public Payment executePayment(String paymentId, String payerId) throws PayPalRESTException {
+        PaymentExecution paymentExecution = new PaymentExecution().setPayerId(payerId);
+        return new Payment().setId(paymentId).execute(apiContext, paymentExecution);
     }
 
-    // Utility methods
-
-    private Amount createAmount(Double total, String currency) {
-        Amount amount = new Amount();
-        amount.setCurrency(currency);
-        amount.setTotal(String.format(Locale.forLanguageTag(currency), "%.2f", total));
-        return amount;
+    private String extractApprovalUrl(Payment payment) throws PayPalRESTException {
+        return payment.getLinks().stream()
+                .filter(link -> "approval_url".equals(link.getRel()))
+                .map(Links::getHref)
+                .findFirst()
+                .orElseThrow(() -> new PayPalRESTException("Approval URL not found"));
     }
 
-    private Transaction createTransaction(String description, Amount amount) {
-        Transaction transaction = new Transaction();
-        transaction.setDescription(description);
-        transaction.setAmount(amount);
-        return transaction;
+    private Amount buildAmount(Double total, String currency) {
+        return new Amount()
+                .setCurrency(currency)
+                .setTotal(String.format(Locale.US, "%.2f", total));
     }
 
-    private Payer createPayer(String method) {
-        Payer payer = new Payer();
-        payer.setPaymentMethod(method);
-        return payer;
+    private Transaction buildTransaction(String description, Amount amount) {
+        return (Transaction) new Transaction()
+                .setDescription(description)
+                .setAmount(amount);
     }
 
-    private RedirectUrls createRedirectUrls(String cancelUrl, String successUrl) {
-        RedirectUrls redirectUrls = new RedirectUrls();
-        redirectUrls.setCancelUrl(cancelUrl);
-        redirectUrls.setReturnUrl(successUrl);
-        return redirectUrls;
+    private Payer buildPayer(String method) {
+        return new Payer().setPaymentMethod(method);
+    }
+
+    private RedirectUrls buildRedirectUrls(String cancelUrl, String successUrl) {
+        return new RedirectUrls()
+                .setCancelUrl(cancelUrl)
+                .setReturnUrl(successUrl);
     }
 }
