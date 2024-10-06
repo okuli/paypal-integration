@@ -40,8 +40,8 @@ public class PaypalControllerIntegrationTest {
                 anyString(), anyString(), anyString())).thenReturn(expectedApprovalUrl);
 
         mockMvc.perform(post("/payment/create")
-                        .header("Accept", MediaType.APPLICATION_JSON_VALUE)
-                        .contentType(MediaType.APPLICATION_JSON))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Accept", MediaType.APPLICATION_JSON_VALUE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.approvalUrl").value(expectedApprovalUrl));
     }
@@ -62,4 +62,3 @@ public class PaypalControllerIntegrationTest {
                 .andExpect(jsonPath("$.paymentId").value(paymentId));
     }
 }
-

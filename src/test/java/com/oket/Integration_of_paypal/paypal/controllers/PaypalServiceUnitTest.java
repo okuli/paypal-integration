@@ -38,12 +38,12 @@ public class PaypalServiceUnitTest {
 
         // Mock PaymentExecution and API interaction
         PaymentExecution paymentExecution = new PaymentExecution().setPayerId(payerId);
-        when(payment.execute(apiContext, paymentExecution)).thenReturn(payment);  // Mock payment execution
-        when(payment.getState()).thenReturn("approved");  // Mock the payment state
+        when(payment.execute(apiContext, paymentExecution)).thenReturn(payment);
+        when(payment.getState()).thenReturn("approved");
 
         // Spy on the service to mock the executePayment method
         PaypalServiceImpl paypalServiceSpy = spy(paypalService);
-        doReturn(payment).when(paypalServiceSpy).executePayment(paymentId, payerId);  // Mock executePayment method
+        doReturn(payment).when(paypalServiceSpy).executePayment(paymentId, payerId);
 
         // When: Calling the method under test
         boolean result = paypalServiceSpy.executePaymentAndCheckState(paymentId, payerId);

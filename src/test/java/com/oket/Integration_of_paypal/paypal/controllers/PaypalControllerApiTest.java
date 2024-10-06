@@ -39,13 +39,14 @@ public class PaypalControllerApiTest {
     public void testCreatePayment() throws Exception {
         String expectedApprovalUrl = "http://approval.url";
 
-        when(paypalService.createPaymentWithApprovalUrl(anyDouble(), anyString(), anyString(), anyString(),
-                anyString(), anyString(), anyString())).thenReturn(expectedApprovalUrl);
+        when(paypalService.createPaymentWithApprovalUrl(
+                anyDouble(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(expectedApprovalUrl);
 
         // Perform the request and check for success
         mockMvc.perform(post("/payment/create")
-                        .header("Accept", MediaType.APPLICATION_JSON_VALUE)
-                        .contentType(MediaType.APPLICATION_JSON))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.approvalUrl").value(expectedApprovalUrl));
     }
