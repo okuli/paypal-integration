@@ -3,7 +3,6 @@ import com.oket.Integration_of_paypal.paypal.services.PaypalService;
 import com.paypal.base.rest.PayPalRESTException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,16 +13,12 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.view.RedirectView;
 
-import java.net.URI;
-import java.time.Instant;
-import java.util.Optional;
-
 @Tag(name = "Paypal", description = "The Paypal API")
 @Controller
 @RequestMapping("/")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = "*") //In real production case, this will be restricted. It is only for
+@CrossOrigin(origins = "*")
 public class PaypalController {
 
     private final PaypalService paypalService;
@@ -34,104 +29,104 @@ public class PaypalController {
     @Value("${paypal.cancel-url}")
     private String cancelUrl;
 
-    @PostConstruct
-    public void init() {
-        // Validate that configuration URLs are set during startup
-        if (successUrl == null || cancelUrl == null) {
-            throw new IllegalStateException("Configuration URLs for PayPal are missing");
-        }
-    }
-
     @GetMapping("/")
     public String home() {
         return "index";
     }
 
     // Define Records to encapsulate responses
-    public record PaymentResponse(String status, String paymentId, String payerId, String timestamp) {}
-    public record ErrorResponse(String status, String message, String error, String timestamp) {}
-    public record CancelResponse(String status, String message, String timestamp) {}
-    public record SuccessResponse(String status, String approvalUrl, String paymentId, String timestamp) {}
+    public record PaymentResponse(String status, String paymentId, String payerId) {}
+    public record ErrorResponse(String status, String message, String error) {}
+    public record CancelResponse(String status, String message) {}
+    public record SuccessResponse(String status, String approvalUrl, String paymentId) {}
 
-    @Operation(summary = "Create a new PayPal payment", description = "Creates a new PayPal payment and returns either a JSON response or redirects to a payment approval URL.")
+    @Operation(summary = "Create a new PayPal payment",
+            description = "Creates a new PayPal payment and returns either a JSON response or redirects to a payment approval URL.")
     @PostMapping(value = "/payment/create", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.TEXT_HTML_VALUE})
-    public ResponseEntity<?> createPayment(@RequestHeader(value = "Accept", required = false) Optional<String> accept) {
+    public Object createPayment(@RequestHeader(value = "Accept", required = false) String accept) {
+        // Basic validation example
+        if (cancelUrl == null || successUrl == null) {
+            return handleError(accept, "Missing configuration URLs", "/payment/error", null);
+        }
+
         try {
-            String approvalUrl = paypalService.createPaymentWithApprovalUrl(
-                    10.0, "USD", "paypal", "sale", "Payment description", cancelUrl, successUrl);
-            return respondBasedOnAcceptHeader(accept.orElse("application/json"), approvalUrl);
+            String approvalUrl = paypalService.createPaymentWithApprovalUrl(10.0, "USD", "paypal", "sale",
+                    "Payment description", cancelUrl, successUrl);
+            return respondBasedOnAcceptHeader(accept, approvalUrl);
         } catch (PayPalRESTException e) {
+            log.error("Error occurred while creating payment", e);
             return handleError(accept, "Payment creation failed", "/payment/error", e);
         }
     }
 
-    @Operation(summary = "Handle successful payment", description = "Handles a successful payment and returns a success view or JSON response.")
+    @Operation(summary = "Handle successful payment",
+            description = "Handles a successful payment and returns a success view or JSON response.")
     @GetMapping("/payment/success")
-    public ResponseEntity<?> paymentSuccess(@RequestHeader(value = "Accept", required = false) Optional<String> accept,
-                                            @RequestParam("paymentId") String paymentId,
-                                            @RequestParam("PayerID") String payerId) {
+    public Object paymentSuccess(
+            @RequestHeader(value = "Accept", required = false) String accept,
+            @RequestParam("paymentId") String paymentId,
+            @RequestParam("PayerID") String payerId) {
 
-        if (isInvalid(paymentId) || isInvalid(payerId)) {
-            return handleErrorResponse(accept, "Invalid paymentId or payerId", "paymentSuccess", HttpStatus.BAD_REQUEST);
+        // Validation of paymentId and payerId
+        if (paymentId == null || paymentId.isEmpty() || payerId == null || payerId.isEmpty()) {
+            return handleErrorResponse(accept, "Invalid paymentId or payerId", "paymentSuccess");
         }
 
         try {
             boolean isPaymentApproved = paypalService.executePaymentAndCheckState(paymentId, payerId);
             if (isPaymentApproved) {
-                PaymentResponse paymentInfo = new PaymentResponse("success", paymentId, payerId, getCurrentTimestamp());
+                PaymentResponse paymentInfo = new PaymentResponse("success", paymentId, payerId);
                 return createResponse(accept, paymentInfo, "paymentSuccess");
             }
         } catch (PayPalRESTException e) {
-            log.error("Error during payment execution: {}", e.getMessage(), e);
+            log.error("Error during payment execution", e);
         }
-        return handleErrorResponse(accept, "Payment execution failed", "paymentSuccess", HttpStatus.INTERNAL_SERVER_ERROR);
+        return handleErrorResponse(accept, "Payment execution failed", "paymentSuccess");
     }
 
-    @Operation(summary = "Handle payment cancellation", description = "Handles a cancelled payment and returns either a cancellation view or a JSON response.")
+    @Operation(summary = "Handle payment cancellation",
+            description = "Handles a cancelled payment and returns either a cancellation view or a JSON response.")
     @GetMapping("/payment/cancel")
-    public ResponseEntity<?> paymentCancel(@RequestHeader(value = "Accept", required = false) Optional<String> accept) {
-        return createResponse(accept, new CancelResponse("cancelled", "Payment cancelled by user", getCurrentTimestamp()), "paymentCancel");
+    public Object paymentCancel(@RequestHeader(value = "Accept", required = false) String accept) {
+        CancelResponse response = new CancelResponse("cancelled", "Payment cancelled by user");
+        return createResponse(accept, response, "paymentCancel");
     }
 
-    @Operation(summary = "Handle payment error", description = "Handles errors during the payment process and returns an error view or JSON response.")
+    @Operation(summary = "Handle payment error",
+            description = "Handles errors during the payment process and returns an error view or JSON response.")
     @GetMapping("/payment/error")
-    public ResponseEntity<?> paymentError(@RequestHeader(value = "Accept", required = false) Optional<String> accept) {
-        return createResponse(accept, new ErrorResponse("error", "An error occurred during the payment process", null, getCurrentTimestamp()), "paymentError");
+    public Object paymentError(@RequestHeader(value = "Accept", required = false) String accept) {
+        ErrorResponse response = new ErrorResponse("error", "An error occurred during the payment process", null);
+        return createResponse(accept, response, "paymentError");
     }
 
     // Utility Methods
 
-    private boolean isInvalid(String value) {
-        return value == null || value.isEmpty();
-    }
-
-    private ResponseEntity<?> createResponse(Optional<String> accept, Object message, Object view) {
-        return (accept.isPresent() && accept.get().contains("application/json"))
+    private Object createResponse(String accept, Object message, Object view) {
+        return accept != null && accept.contains("application/json")
                 ? ResponseEntity.ok(message)
-                : ResponseEntity.status(HttpStatus.OK).body(view); // Assuming view returns an appropriate response
+                : view;
     }
 
-    private ResponseEntity<?> respondBasedOnAcceptHeader(String accept, String approvalUrl) {
-        if (accept.contains("application/json")) {
-            return ResponseEntity.ok(new SuccessResponse("success", approvalUrl, null, getCurrentTimestamp()));
+    private Object respondBasedOnAcceptHeader(String accept, String approvalUrl) {
+        if (accept != null && accept.contains("application/json")) {
+            SuccessResponse response = new SuccessResponse("success", approvalUrl, null);
+            return ResponseEntity.ok(response);
         }
-        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(approvalUrl)).build(); // Use FOUND for redirects
+        return new RedirectView(approvalUrl);
     }
 
-    private ResponseEntity<?> handleError(Optional<String> accept, String errorMessage, String errorPage, Exception e) {
-        log.error("Redirecting to error page: {} due to error: {}", errorPage, e != null ? e.getMessage() : "Unknown error");
-        String errorDetails = (e != null) ? e.getMessage() : "Unknown error";
-        ErrorResponse response = new ErrorResponse("error", errorMessage, errorDetails, getCurrentTimestamp());
-        return (accept.isPresent() && accept.get().contains("application/json"))
+    private Object handleError(String accept, String errorMessage, String errorPage, Exception e) {
+        log.error("Redirecting to error page: {}", errorPage);
+        String errorDetails = e != null ? e.getMessage() : "Unknown error";
+        ErrorResponse response = new ErrorResponse("error", errorMessage, errorDetails);
+
+        return accept != null && accept.contains("application/json")
                 ? ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response)
-                : ResponseEntity.status(HttpStatus.FOUND).location(URI.create(errorPage)).build();
+                : new RedirectView(errorPage);
     }
 
-    private ResponseEntity<?> handleErrorResponse(Optional<String> accept, String errorMessage, String errorPage, HttpStatus status) {
+    private Object handleErrorResponse(String accept, String errorMessage, String errorPage) {
         return handleError(accept, errorMessage, errorPage, null);
-    }
-
-    private String getCurrentTimestamp() {
-        return Instant.now().toString(); // Adjust format as necessary
     }
 }
