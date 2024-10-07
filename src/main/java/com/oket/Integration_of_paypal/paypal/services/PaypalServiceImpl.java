@@ -85,9 +85,9 @@ public class PaypalServiceImpl implements PaypalService {
     }
 
     // Helper method to build a Payer object representing the payer's details (e.g., payment method).
-    private Payer buildPayer(String method) {
-        // Creates and returns a Payer object with the specified payment method (e.g., "paypal").
-        return new Payer().setPaymentMethod(method);
+    private Payer buildPayer(String paymentMethod) {
+        return new Payer()
+                .setPaymentMethod(paymentMethod);
     }
 
     // Helper method to build a RedirectUrls object representing the URLs for success and cancellation.

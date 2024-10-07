@@ -13,146 +13,142 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.view.RedirectView;
 
-@Tag(name = "Paypal", description = "The Paypal API") // OpenAPI documentation tag for grouping and describing the API.
-@Controller // Marks this class as a Spring MVC Controller that handles HTTP requests.
-@RequestMapping("/") // Base URL for the controller's endpoints.
-@RequiredArgsConstructor // Generates a constructor with required fields (i.e., final fields).
-@Slf4j // Lombok annotation to automatically generate a logger for logging messages.
-@CrossOrigin(origins = "*") // Allows cross-origin requests from all sources, which should be restricted for security.
+import jakarta.annotation.PostConstruct;
+
+
+@Tag(name = "Paypal", description = "The Paypal API")
+@Controller
+@RequestMapping("/")
+@RequiredArgsConstructor
+@Slf4j
+@CrossOrigin(origins = "*")
 public class PaypalController {
+    private final PaypalService paypalService;
 
-    private final PaypalService paypalService; // Dependency injection for PayPal service, which contains business logic.
-
-    @Value("${paypal.success-url}") // Injects success URL value from configuration.
+    @Value("${paypal.success-url}")
     private String successUrl;
 
-    @Value("${paypal.cancel-url}") // Injects cancel URL value from configuration.
+    @Value("${paypal.cancel-url}")
     private String cancelUrl;
 
-    @GetMapping("/") // Handles GET requests to the root URL ("/").
-    public String home() {
-        return "index"; // Returns the "index" view (usually a static webpage).
+    private static final String INDEX = "index";
+    private static final String SUCCESS = "success";
+    private static final String PAYMENT_SUCCESS = "paymentSuccess";
+    private static final String PAYMENT_CREATION_FAILED = "Payment creation failed";
+    private static final String PAYMENT_EXECUTION_FAILED = "Payment execution failed";
+
+    // Eager configuration validation
+    @PostConstruct
+    private void validateConfigUrls() {
+        if (successUrl == null || successUrl.isBlank()) {
+            throw new IllegalArgumentException("PayPal success URL is missing or empty");
+        }
+        if (cancelUrl == null || cancelUrl.isBlank()) {
+            throw new IllegalArgumentException("PayPal cancel URL is missing or empty");
+        }
+        log.info("PayPal configuration URLs validated successfully: Success URL - {}, Cancel URL - {}", successUrl, cancelUrl);
     }
 
-    // Define response record types to encapsulate different response formats (JSON, view names, etc.)
+    @GetMapping("/")
+    public String home() {
+        return INDEX;
+    }
+
     public record PaymentResponse(String status, String paymentId, String payerId) {}
     public record ErrorResponse(String status, String message, String error) {}
     public record CancelResponse(String status, String message) {}
     public record SuccessResponse(String status, String approvalUrl) {}
 
-    @Operation(summary = "Create a new PayPal payment", // OpenAPI annotation to describe the API endpoint.
+    @Operation(summary = "Create a new PayPal payment",
             description = "Creates a new PayPal payment and returns either a JSON response or redirects to a payment approval URL.")
     @PostMapping(value = "/payment/create", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.TEXT_HTML_VALUE})
-    // Handles POST requests to "/payment/create", supporting JSON and HTML response formats.
     public Object createPayment(@RequestHeader(value = "Accept", required = false) String accept) {
-        validateConfigUrls(); // Validates the success and cancel URLs.
-
         try {
-            // Calls the service to create a PayPal payment and get the approval URL.
-            String approvalUrl = paypalService.createPaymentWithApprovalUrl(
-                    10.0, "USD", "paypal", "sale", "Payment description", cancelUrl, successUrl);
-            // Returns the response based on the "Accept" header (either JSON or redirects to the approval URL).
+            String approvalUrl = createPayPalPayment();
             return respondBasedOnAcceptHeader(accept, approvalUrl);
         } catch (PayPalRESTException e) {
-            // Logs the error and handles the failure case.
             log.error("Error occurred while creating payment. Accept: {}, Error: {}", accept, e.getMessage(), e);
-            return handleError(accept, "Payment creation failed", "/payment/error", e);
+            return handleError(accept, PAYMENT_CREATION_FAILED, "/payment/error", e);
         }
     }
 
-    @Operation(summary = "Handle successful payment", // OpenAPI documentation for handling successful payments.
+    @Operation(summary = "Handle successful payment",
             description = "Handles a successful payment and returns a success view or JSON response.")
-    @GetMapping("/payment/success") // Handles GET requests to "/payment/success".
+    @GetMapping("/payment/success")
     public Object paymentSuccess(@RequestHeader(value = "Accept", required = false) String accept,
-                                 @RequestParam("paymentId") String paymentId, // Payment ID query parameter.
-                                 @RequestParam("PayerID") String payerId) { // Payer ID query parameter.
-        validatePaymentParams(paymentId, payerId); // Validates the paymentId and payerId.
+                                 @RequestParam("paymentId") String paymentId,
+                                 @RequestParam("PayerID") String payerId) {
+        validatePaymentParams(paymentId, payerId);
 
         try {
-            // Executes the payment through the service and checks if it's approved.
-            boolean isPaymentApproved = paypalService.executePaymentAndCheckState(paymentId, payerId);
-            if (isPaymentApproved) {
-                // Creates a response object with the payment details.
-                PaymentResponse paymentInfo = new PaymentResponse("success", paymentId, payerId);
-                // Returns a response based on the "Accept" header.
-                return createResponse(accept, paymentInfo, "paymentSuccess");
+            if (executePayment(paymentId, payerId)) {
+                return createResponse(accept, new PaymentResponse(SUCCESS, paymentId, payerId), PAYMENT_SUCCESS);
             }
         } catch (PayPalRESTException e) {
-            // Logs any error that occurred during payment execution.
             log.error("Error during payment execution. PaymentId: {}, PayerId: {}, Error: {}", paymentId, payerId, e.getMessage(), e);
         }
-        // If an error occurs or payment is not approved, it handles the error.
-        return handleError(accept, "Payment execution failed", "paymentSuccess", null);
+        return handleError(accept, PAYMENT_EXECUTION_FAILED, PAYMENT_SUCCESS, null);
     }
 
-    @Operation(summary = "Handle payment cancellation", // OpenAPI documentation for handling payment cancellations.
+    private String createPayPalPayment() throws PayPalRESTException {
+        return paypalService.createPaymentWithApprovalUrl(
+                10.0, "USD", "paypal", "sale", "Payment description", cancelUrl, successUrl);
+    }
+
+    private boolean executePayment(String paymentId, String payerId) throws PayPalRESTException {
+        return paypalService.executePaymentAndCheckState(paymentId, payerId);
+    }
+
+    @Operation(summary = "Handle payment cancellation",
             description = "Handles a cancelled payment and returns either a cancellation view or a JSON response.")
-    @GetMapping("/payment/cancel") // Handles GET requests to "/payment/cancel".
+    @GetMapping("/payment/cancel")
     public Object paymentCancel(@RequestHeader(value = "Accept", required = false) String accept) {
-        // Creates a cancellation response object.
-        CancelResponse response = new CancelResponse("cancelled", "Payment cancelled by user");
-        // Returns a response based on the "Accept" header.
-        return createResponse(accept, response, "paymentCancel");
+        return createResponse(accept, new CancelResponse("cancelled", "Payment cancelled by user"), "paymentCancel");
     }
 
-    @Operation(summary = "Handle payment error", // OpenAPI documentation for handling payment errors.
+    @Operation(summary = "Handle payment error",
             description = "Handles errors during the payment process and returns an error view or JSON response.")
-    @GetMapping("/payment/error") // Handles GET requests to "/payment/error".
+    @GetMapping("/payment/error")
     public Object paymentError(@RequestHeader(value = "Accept", required = false) String accept) {
-        // Creates an error response object.
         ErrorResponse response = new ErrorResponse("error", "An error occurred during the payment process", null);
-        // Returns a response based on the "Accept" header.
         return createResponse(accept, response, "paymentError");
     }
 
     // Utility Methods
 
-    // Validates that the cancel and success URLs are configured.
-    private void validateConfigUrls() {
-        if (cancelUrl == null || successUrl == null) {
-            throw new IllegalArgumentException("Missing configuration URLs");
-        }
-    }
-
-    // Validates the paymentId and payerId for non-empty values.
     private void validatePaymentParams(String paymentId, String payerId) {
         if (paymentId.isBlank() || payerId.isBlank()) {
             throw new IllegalArgumentException("Invalid paymentId or payerId");
         }
     }
 
-    // Creates a response object based on the "Accept" header (either JSON or view name).
     private Object createResponse(String accept, Object message, String view) {
-        return isJsonAccepted(accept) ? ResponseEntity.ok(message) : view; // Responds with JSON or view.
+        return isJsonAccepted(accept) ? ResponseEntity.ok(message) : view;
     }
 
-    // Returns either a JSON response or a redirect based on the "Accept" header.
     private Object respondBasedOnAcceptHeader(String accept, String approvalUrl) {
         return isJsonAccepted(accept)
-                ? ResponseEntity.ok(new SuccessResponse("success", approvalUrl)) // JSON response.
-                : new RedirectView(approvalUrl); // Redirects to PayPal approval URL.
+                ? ResponseEntity.ok(new SuccessResponse("success", approvalUrl))
+                : new RedirectView(approvalUrl);
     }
 
-    // Checks if the "Accept" header includes JSON content type.
     private boolean isJsonAccepted(String accept) {
         return accept != null && accept.contains("application/json");
     }
 
-    // Handles errors by logging and responding with appropriate status and messages.
     private Object handleError(String accept, String errorMessage, String errorPage, Exception e) {
         log.error("Redirecting to error page: {}. Error message: {}", errorPage, e != null ? e.getMessage() : "Unknown error");
-        String errorDetails = (e != null) ? e.getMessage() : "Unknown error"; // Logs error details.
-        ErrorResponse response = new ErrorResponse("error", errorMessage, errorDetails); // Creates an error response.
+        String errorDetails = (e != null) ? e.getMessage() : "Unknown error";
+        ErrorResponse response = new ErrorResponse("error", errorMessage, errorDetails);
 
-        // Avoids redirection loops by sending a JSON response if the user is already on the error page.
         if ("/payment/error".equals(errorPage)) {
             return isJsonAccepted(accept)
-                    ? ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response) // JSON response for error.
-                    : ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An internal error occurred."); // Text response.
+                    ? ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response)
+                    : ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An internal error occurred.");
         }
 
         return isJsonAccepted(accept)
-                ? ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response) // JSON error response.
-                : new RedirectView(errorPage); // Redirects to the error page.
+                ? ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response)
+                : new RedirectView(errorPage);
     }
 }
